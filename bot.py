@@ -12,11 +12,8 @@ TOKEN = os.getenv('BOT_TOKEN', '8787588894:AAHo5YdG3H_klIcxmjtKcOj5I-Va0e6sZyI')
 bot = telebot.TeleBot(TOKEN)
 CHANNEL_USERNAME = '@zakaz_taxtachasi'
 
-# Mijozlarning buyurtma tarixi uchun
+# Xotiralar
 user_orders = {}
-
-# Vaqtinchalik xotira (Har bir mijozning ayni paytdagi buyurtma ma'lumotlarini yig'ib borish uchun)
-# Format: {chat_id: {'phone': '+998...', 'type': 'Plombir', 'unit': 'kg', 'qty': '2', 'location': {...}}}
 current_order = {}
 
 # Bosh menyu
@@ -28,7 +25,6 @@ def get_main_menu():
 # /start buyrug'i
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    # Har safar start bosilganda vaqtinchalik xotirani tozalaymiz
     if message.chat.id in current_order:
         del current_order[message.chat.id]
         
@@ -53,9 +49,7 @@ def handle_menu_clicks(message):
             bot.send_message(message.chat.id, text, parse_mode='HTML', reply_markup=get_main_menu())
             
     elif message.text in ["🛒 Yangi buyurtma", "❌ Bekor qilish"]:
-        # Yangi buyurtma boshlanganda mijoz qutichasini (dict) yaratamiz
         current_order[message.chat.id] = {}
-        
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         markup.add(types.KeyboardButton("📱 Telefon raqamni yuborish", request_contact=True))
         markup.add("❌ Bosh menyu")
@@ -79,7 +73,6 @@ def process_phone(message):
         if len(clean_phone) == 9: clean_phone = '998' + clean_phone
         formatted_phone = f"+{clean_phone[:3]} {clean_phone[3:5]} {clean_phone[5:8]} {clean_phone[8:10]} {clean_phone[10:12]}"
         
-        # Vaqtinchalik xotiraga raqamni yozamiz
         current_order[message.chat.id]['phone'] = formatted_phone
         
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -99,7 +92,6 @@ def process_ice_cream(message):
 
     current_order[message.chat.id]['type'] = message.text
     
-    # O'LCHOV BIRLIGINI SO'RASH QADAMI
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("📦 Dona", "⚖️ Kilogramm (kg)", "❌ Bekor qilish")
     
@@ -110,7 +102,7 @@ def process_ice_cream(message):
     )
     bot.register_next_step_handler(message, process_unit)
 
-# 3. O'lchov birligini qabul qilish (Dona yoki kg)
+# 3. O'lchov birligini qabul qilish va MIQDORNI QO'LDA yozishni so'rash
 def process_unit(message):
     if message.text == "❌ Bekor qilish":
         send_welcome(message)
@@ -119,18 +111,18 @@ def process_unit(message):
     unit = "Dona" if "Dona" in message.text else "kg"
     current_order[message.chat.id]['unit'] = unit
 
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
-    if unit == "Dona":
-        markup.add("1 ta", "2 ta", "3 ta", "4 ta", "5 ta", "10 ta", "❌ Bekor qilish")
-        text = "Necha dona xohlaysiz? Yoki o'zingiz yozib yuboring:"
-    else:
-        markup.add("0.5 kg", "1 kg", "1.5 kg", "2 kg", "3 kg", "5 kg", "❌ Bekor qilish")
-        text = "Necha kilogramm xohlaysiz? Yoki o'zingiz yozib yuboring:"
+    # Miqdor uchun faqat "Bekor qilish" tugmasini qoldiramiz, raqamni o'zi yozishi kerak
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+    markup.add("❌ Bekor qilish")
 
-    bot.send_message(message.chat.id, text, reply_markup=markup)
+    if unit == "Dona":
+        bot.send_message(message.chat.id, "Necha dona xohlaysiz? (Raqamni yozib yuboring, masalan: 10):", reply_markup=markup)
+    else:
+        bot.send_message(message.chat.id, "Necha kilogramm xohlaysiz? (Raqamni yozib yuboring, masalan: 1.5):", reply_markup=markup)
+        
     bot.register_next_step_handler(message, process_quantity)
 
-# 4. Miqdorni qabul qilish va LOKATSIYA so'rash
+# 4. Miqdorni qabul qilish va LOKATSIYANI so'rash
 def process_quantity(message):
     if message.text == "❌ Bekor qilish":
         send_welcome(message)
@@ -138,42 +130,42 @@ def process_quantity(message):
 
     current_order[message.chat.id]['qty'] = message.text
 
-    # LOKATSIYANI SO'RASH QADAMI
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    location_btn = types.KeyboardButton("📍 Joylashuvni (Lokatsiya) yuborish", request_location=True)
+    location_btn = types.KeyboardButton("📍 Joylashuvni yuborish (Avtomat)", request_location=True)
     markup.add(location_btn, "❌ Bekor qilish")
 
     bot.send_message(
         message.chat.id, 
-        "Kuryerimiz yetkazib berishi uchun manzilingizni (lokatsiyani) pastdagi tugma orqali yuboring:", 
+        "Kuryerimiz yetkazib berishi uchun manzilingiz kerak.\n\n"
+        "Pastdagi '📍 Joylashuvni yuborish' tugmasini bosing (shunda avtomat keladi) yoki manzilingizni matn qilib yozib yuboring:", 
         reply_markup=markup
     )
-    # Endi kutilayotgan narsa faqat matn emas, 'location' ekanligini bildiramiz
     bot.register_next_step_handler(message, process_location)
 
-# 5. Lokatsiyani qabul qilish va KANALGA yuborish (Eng oxirgi qadam)
+# 5. Lokatsiyani qabul qilish va KANALGA yuborish
 def process_location(message):
     try:
         if message.text == "❌ Bekor qilish":
             send_welcome(message)
             return
 
-        # Foydalanuvchi lokatsiya jo'natganmi yoki shunchaki matnmi?
         if message.location:
             latitude = message.location.latitude
             longitude = message.location.longitude
             map_link = f"https://maps.google.com/?q={latitude},{longitude}"
             location_text = f"<a href='{map_link}'>📍 Xaritada ko'rish</a>"
         else:
-            # Agar foydalanuvchi lokatsiya jo'natmay, o'zi "Namangan shahar, ..." deb yozsa
             location_text = message.text
 
-        order_data = current_order[message.chat.id]
+        order_data = current_order.get(message.chat.id)
+        if not order_data:
+            send_welcome(message)
+            return
+
         user_name = message.from_user.first_name
         username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        # 1. Tarixga saqlash
         if message.chat.id not in user_orders:
             user_orders[message.chat.id] = []
         user_orders[message.chat.id].append({
@@ -183,7 +175,6 @@ def process_location(message):
             "date": current_time
         })
 
-        # 2. Mijozga xabar
         bot.send_message(
             message.chat.id, 
             f"🎉 Rahmat, {user_name}! Buyurtmangiz qabul qilindi.\n"
@@ -191,7 +182,6 @@ def process_location(message):
             reply_markup=get_main_menu()
         )
 
-        # 3. Kanalga matn yuborish
         channel_text = (
             "🚨 <b>YANGI BUYURTMA!</b> 🍦\n\n"
             f"👤 <b>Mijoz:</b> {user_name} ({username})\n"
@@ -203,18 +193,15 @@ def process_location(message):
         )
         bot.send_message(CHANNEL_USERNAME, channel_text, parse_mode='HTML', disable_web_page_preview=True)
 
-        # 4. Agar haqiqiy lokatsiya bo'lsa, kanalga Google Maps xaritasining o'zini ham yuboramiz (kuryerga qulay)
         if message.location:
             bot.send_location(CHANNEL_USERNAME, latitude, longitude)
 
-        # Xotirani tozalash
         del current_order[message.chat.id]
 
     except Exception as e:
         logging.error(f"Xatolik: {e}")
-        bot.send_message(message.chat.id, "Kechirasiz, lokatsiyani qabul qilishda xatolik yuz berdi. /start ni bosing.")
+        bot.send_message(message.chat.id, "Kechirasiz, xatolik yuz berdi. /start ni bosing.")
 
 if __name__ == '__main__':
     logging.info("Muzqaymoq boti ishga tushdi...")
-    # Xatolik 409 chiqmasligi uchun eski yangilanishlarni e'tiborsiz qoldiruvchi parametrni qo'shamiz
     bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
