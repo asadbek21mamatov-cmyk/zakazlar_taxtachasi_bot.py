@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Muzqaymoq Zakaz</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #1e1e24; color: white; }
+        input, select, button { width: 100%; padding: 10px; margin-top: 10px; border-radius: 8px; border: none; }
+        button { background-color: #3498db; color: white; font-weight: bold; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <h2>Oformit zakaz</h2>
+    
+    <label>Muzqaymoq turi:</label>
+    <select id="icecream">
+        <option value="Plombir">Plombir</option>
+        <option value="Shokoladli">Shokoladli</option>
+    </select>
+
+    <label>Miqdori (nechta/kg):</label>
+    <input type="text" id="quantity" placeholder="Masalan: 2 ta yoki 1.5 kg">
+
+    <label>Manzilingiz:</label>
+    <input type="text" id="address" placeholder="Manzilni kiriting...">
+
+    <button onclick="sendOrder()">Tasdiqlash</button>
+
+    <script>
+        // Telegram tizimini ishga tushirish
+        let tg = window.Telegram.WebApp;
+        tg.expand(); // Ekranni to'liq ochish
+
+        function sendOrder() {
+            let type = document.getElementById("icecream").value;
+            let qty = document.getElementById("quantity").value;
+            let address = document.getElementById("address").value;
+
+            // Barcha ma'lumotlarni bitta obyektdagi yig'ib, JSON formatida botga yuboramiz
+            let data = {
+                type: type,
+                qty: qty,
+                address: address
+            };
+            
+            // Ma'lumotni Python botga yuborish
+            tg.sendData(JSON.stringify(data));
+        }
+    </script>
+</body>
+</html>
