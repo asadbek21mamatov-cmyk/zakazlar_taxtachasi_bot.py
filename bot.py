@@ -17,6 +17,7 @@ user_orders = {}
 current_order = {}
 
 # Bosh menyu
+@bot.message_handler(commands=['menyu'])
 def get_main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("🛒 Yangi buyurtma", "📜 Zakaz tarixi")
