@@ -16,12 +16,14 @@ CHANNEL_USERNAME = '@zakaz_taxtachasi'
 user_orders = {}
 current_order = {}
 
-# Bosh menyu
+# /menyu buyrug'i yozilganda ishlaydi
 @bot.message_handler(commands=['menyu'])
-def get_main_menu():
+def send_main_menu(message): # message qo'shildi
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("🛒 Yangi buyurtma", "📜 Zakaz tarixi")
-    return markup
+    
+    # Tugmalarni matn bilan birga yuborish kerak
+    bot.send_message(message.chat.id, "Bosh menyu:", reply_markup=markup)
 
 # /start buyrug'i
 @bot.message_handler(commands=['start'])
