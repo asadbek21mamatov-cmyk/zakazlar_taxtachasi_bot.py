@@ -8,7 +8,7 @@ from telebot import types
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Tokenni muhit o'zgaruvchisidan olamiz
-TOKEN = os.getenv('BOT_TOKEN', 'BU_YERGA_TOKENINGIZNI_YOZING')
+TOKEN = os.getenv('BOT_TOKEN', '8787588894:AAHo5YdG3H_klIcxmjtKcOj5I-Va0e6sZyI')
 bot = telebot.TeleBot(TOKEN)
 
 # Buyurtmalar tushadigan kanal (silka emas, @ bilan boshlanadigan username yoziladi)
