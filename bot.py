@@ -111,38 +111,51 @@ def handle_menu_clicks(message):
         )
         bot.register_next_step_handler(message, process_name)
 
-# 0. YANGI: ISM FAMILIYANI QATTIQ TEKSHIRISH
+# --- YANGI QO'SHILGAN: AQLLI ISM FILTRI ---
+def is_realistic_name(word):
+    word_lower = word.lower()
+    # 1. Unli harf bormi?
+    has_vowel = any(v in word_lower for v in "aeiouy")
+    if not has_vowel:
+        return False
+    # 2. Uchta bir xil harf ketma-ket kelsachi? (masalan: aaali)
+    if re.search(r'(.)\1\1', word_lower):
+        return False
+    # 3. Beshta undosh harf ketma-ket kelsachi? (masalan: asdjbf)
+    if re.search(r'[^aeiouy`\' ]{5,}', word_lower):
+        return False
+    return True
+
+# 0. ISM FAMILIYANI QATTIQ TEKSHIRISH
 def process_name(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
     
-    # Ortiqcha bo'sh joylarni tozalash
     name_text = re.sub(r'\s+', ' ', message.text.strip())
     words = name_text.split()
     
     is_valid = True
-    # 1. Aniq 2 ta so'z bo'lishi shart (Otchestvo ham, faqat ism ham o'tmaydi)
     if len(words) != 2:
         is_valid = False
     else:
         for word in words:
-            # 2. Harflardan iborat ekanligini tekshirish (Tutuq belgisiga ruxsat)
             alpha_word = word.replace("'", "").replace("`", "").replace("‘", "").replace("’", "")
-            # 3. Har bir so'z kamida 3 ta harf bo'lishi kerak va faqat harflardan iborat bo'lishi kerak
             if not alpha_word.isalpha() or len(alpha_word) < 3:
+                is_valid = False
+            elif not is_realistic_name(alpha_word):
                 is_valid = False
                 
     if not is_valid:
         bot.send_message(
             message.chat.id, 
-            "❌ Noto'g'ri format! Iltimos, <b>faqat Ism va Familiya</b> kiriting (aniq 2 ta so'z).\n\n"
-            "⚠️ Raqamlar, tushunarsiz harflar yoki uchtalik ism-shariflar qabul qilinmaydi.\n"
-            "(To'g'ri namuna: <i>Alisher Usmonov</i>):",
+            "❌ Kiritilgan ism haqiqiyga o'xshamayapti!\n\n"
+            "Iltimos, <b>faqat haqiqiy Ism va Familiya</b> kiriting (aniq 2 ta so'z).\n"
+            "⚠️ Tushunarsiz yozuvlar (masalan: <i>asdfg</i>) qabul qilinmaydi.\n"
+            "(Namuna: <i>Alisher Usmonov</i>):",
             parse_mode='HTML'
         )
         bot.register_next_step_handler(message, process_name)
         return
         
-    # Ism va familiyani chiroyli qilib bosh harf bilan saqlaymiz
     formatted_name = f"{words[0].capitalize()} {words[1].capitalize()}"
     current_order[message.chat.id]['receiver'] = formatted_name
     
