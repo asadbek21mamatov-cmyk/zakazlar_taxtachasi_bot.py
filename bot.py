@@ -111,22 +111,17 @@ def handle_menu_clicks(message):
         )
         bot.register_next_step_handler(message, process_name)
 
-# --- YANGI QO'SHILGAN: AQLLI ISM FILTRI ---
 def is_realistic_name(word):
     word_lower = word.lower()
-    # 1. Unli harf bormi?
     has_vowel = any(v in word_lower for v in "aeiouy")
     if not has_vowel:
         return False
-    # 2. Uchta bir xil harf ketma-ket kelsachi? (masalan: aaali)
     if re.search(r'(.)\1\1', word_lower):
         return False
-    # 3. Beshta undosh harf ketma-ket kelsachi? (masalan: asdjbf)
     if re.search(r'[^aeiouy`\' ]{5,}', word_lower):
         return False
     return True
 
-# 0. ISM FAMILIYANI QATTIQ TEKSHIRISH
 def process_name(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
     
@@ -169,7 +164,6 @@ def process_name(message):
     )
     bot.register_next_step_handler(message, process_phone)
 
-# 1. RAQAM TEKSHIRUVI
 def process_phone(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
     
@@ -227,7 +221,6 @@ def process_phone(message):
             bot.register_next_step_handler(message, process_phone)
             return
 
-# 2. Muzqaymoq turi
 def process_ice_cream(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
     current_order[message.chat.id]['type'] = message.text
@@ -236,7 +229,6 @@ def process_ice_cream(message):
     bot.send_message(message.chat.id, f"Siz <b>{message.text}</b> tanladingiz.\nQanday o'lchovda?", reply_markup=markup, parse_mode='HTML')
     bot.register_next_step_handler(message, process_unit)
 
-# 3. O'lchov
 def process_unit(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
     unit = "Dona" if "Dona" in message.text else "kg"
@@ -249,7 +241,6 @@ def process_unit(message):
         bot.send_message(message.chat.id, "Necha kilogramm xohlaysiz? (Faqat raqam yozing):", reply_markup=markup)
     bot.register_next_step_handler(message, process_quantity)
 
-# 4. Miqdor
 def process_quantity(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
     qty_text = message.text.replace(',', '.').strip()
@@ -267,24 +258,29 @@ def process_quantity(message):
     bot.send_message(message.chat.id, "To'lovni qanday amalga oshirasiz?", reply_markup=markup)
     bot.register_next_step_handler(message, process_payment)
 
-# 5. To'lov
 def process_payment(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
     current_order[message.chat.id]['payment'] = message.text
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    markup.add(types.KeyboardButton("📍 Joylashuvni yuborish", request_location=True), "❌ Bekor qilish")
-    bot.send_message(message.chat.id, "Manzilingizni yuboring:", reply_markup=markup)
+    markup.add(types.KeyboardButton("📍 Joylashuvni yuborish (Avtomat)", request_location=True), "❌ Bekor qilish")
+    bot.send_message(
+        message.chat.id, 
+        "Manzilingizni yuboring (Faqat pastdagi tugma orqali):", 
+        reply_markup=markup
+    )
     bot.register_next_step_handler(message, process_location)
 
-# 6. Lokatsiya va Matn
+# 6. FAQAT TUGMA ORQALI LOKATSIYA QABUL QILISH
 def process_location(message):
     try:
         if message.text == "❌ Bekor qilish": return cancel_order(message)
         
+        # 1-holat: Agar haqiqatdan ham lokatsiya (GPS xarita) yuborgan bo'lsa
         if message.location:
             lat = message.location.latitude
             lon = message.location.longitude
             
+            # O'zbekiston chegaralarini tekshirish
             if not (37.0 <= lat <= 45.6 and 56.0 <= lon <= 73.2):
                 bot.send_message(message.chat.id, "❌ Uzr, lekin siz yuborgan joylashuv O'zbekiston hududidan tashqarida. Iltimos, to'g'ri manzil yuboring:")
                 bot.register_next_step_handler(message, process_location)
@@ -292,21 +288,20 @@ def process_location(message):
 
             map_link = f"https://maps.google.com/?q={lat},{lon}"
             location_text = f"<a href='{map_link}'>📍 Xaritada ko'rish</a>"
-        else:
-            address_text = message.text.strip()
-            if len(address_text) < 10 or ' ' not in address_text:
-                bot.send_message(
-                    message.chat.id, 
-                    "❌ Kiritilgan manzil tushunarsiz yoki juda qisqa!\n\n"
-                    "Iltimos, manzilingizni to'liq va tushunarli qilib yozing.\n"
-                    "(Masalan: <i>Namangan shahar, 6-mikrorayon</i>):",
-                    parse_mode='HTML'
-                )
-                bot.register_next_step_handler(message, process_location)
-                return
             
-            location_text = address_text
+        # 2-holat: Agar mijoz o'jarlik qilib MATN yozib yuborgan bo'lsa
+        else:
+            bot.send_message(
+                message.chat.id, 
+                "❌ Manzilni qo'lda yozish mumkin emas!\n\n"
+                "Iltimos, pastdagi <b>'📍 Joylashuvni yuborish'</b> tugmasini bosing:",
+                parse_mode='HTML'
+            )
+            # Yana shu qadamga qaytarib qo'yamiz (Kutilaveradi)
+            bot.register_next_step_handler(message, process_location)
+            return
 
+        # Lokatsiya to'g'ri bo'lsa, davom etamiz
         order_data = current_order.get(message.chat.id)
         if not order_data: return send_welcome(message)
 
@@ -340,7 +335,7 @@ def process_location(message):
         )
         bot.send_message(CHANNEL_USERNAME, channel_text, parse_mode='HTML', disable_web_page_preview=True)
 
-        if message.location: bot.send_location(CHANNEL_USERNAME, message.location.latitude, message.location.longitude)
+        bot.send_location(CHANNEL_USERNAME, lat, lon)
         del current_order[message.chat.id]
 
     except Exception as e:
