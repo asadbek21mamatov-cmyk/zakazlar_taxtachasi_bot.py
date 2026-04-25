@@ -93,7 +93,8 @@ def handle_menu_clicks(message):
         else:
             text = "<b>Sizning tarixingiz:</b>\n\n"
             for i, order in enumerate(history, 1):
-                text += f"{i}. <b>{order['type']}</b> - {order['qty']} {order['unit']} <i>({order['date']})</i>\n"
+                receiver = order.get('receiver', 'Noma\'lum')
+                text += f"{i}. <b>{order['type']}</b> - {order['qty']} {order['unit']} <i>({order['date']})</i> [Kimgaga: {receiver}]\n"
             bot.send_message(message.chat.id, text, parse_mode='HTML', reply_markup=get_main_menu())
             
     elif message.text == "❌ Bekor qilish":
@@ -101,22 +102,68 @@ def handle_menu_clicks(message):
         
     elif message.text == "🛒 Yangi buyurtma":
         current_order[message.chat.id] = {'allow_manual': False}
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        markup.add(types.KeyboardButton("📱 Telefon raqamni yuborish", request_contact=True))
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
         markup.add("❌ Bekor qilish")
-        bot.send_message(message.chat.id, "Boshladik! Pastdagi tugma orqali telefon raqamingizni yuboring:", reply_markup=markup)
-        bot.register_next_step_handler(message, process_phone)
+        bot.send_message(
+            message.chat.id, 
+            "Boshladik! Iltimos, muzqaymoqni qabul qilib oluvchining <b>Ism va Familiyasini</b> yozib yuboring:", 
+            reply_markup=markup, parse_mode='HTML'
+        )
+        bot.register_next_step_handler(message, process_name)
 
-# 1. SODDALASHTIRILGAN RAQAM TEKSHIRUVI
+# 0. YANGI: ISM FAMILIYANI QATTIQ TEKSHIRISH
+def process_name(message):
+    if message.text == "❌ Bekor qilish": return cancel_order(message)
+    
+    # Ortiqcha bo'sh joylarni tozalash
+    name_text = re.sub(r'\s+', ' ', message.text.strip())
+    words = name_text.split()
+    
+    is_valid = True
+    # 1. Aniq 2 ta so'z bo'lishi shart (Otchestvo ham, faqat ism ham o'tmaydi)
+    if len(words) != 2:
+        is_valid = False
+    else:
+        for word in words:
+            # 2. Harflardan iborat ekanligini tekshirish (Tutuq belgisiga ruxsat)
+            alpha_word = word.replace("'", "").replace("`", "").replace("‘", "").replace("’", "")
+            # 3. Har bir so'z kamida 3 ta harf bo'lishi kerak va faqat harflardan iborat bo'lishi kerak
+            if not alpha_word.isalpha() or len(alpha_word) < 3:
+                is_valid = False
+                
+    if not is_valid:
+        bot.send_message(
+            message.chat.id, 
+            "❌ Noto'g'ri format! Iltimos, <b>faqat Ism va Familiya</b> kiriting (aniq 2 ta so'z).\n\n"
+            "⚠️ Raqamlar, tushunarsiz harflar yoki uchtalik ism-shariflar qabul qilinmaydi.\n"
+            "(To'g'ri namuna: <i>Alisher Usmonov</i>):",
+            parse_mode='HTML'
+        )
+        bot.register_next_step_handler(message, process_name)
+        return
+        
+    # Ism va familiyani chiroyli qilib bosh harf bilan saqlaymiz
+    formatted_name = f"{words[0].capitalize()} {words[1].capitalize()}"
+    current_order[message.chat.id]['receiver'] = formatted_name
+    
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add(types.KeyboardButton("📱 Telefon raqamni yuborish", request_contact=True))
+    markup.add("❌ Bekor qilish")
+    bot.send_message(
+        message.chat.id, 
+        f"Yaxshi! Endi <b>{formatted_name}</b>ning telefon raqamini pastdagi tugma orqali yuboring:", 
+        reply_markup=markup, parse_mode='HTML'
+    )
+    bot.register_next_step_handler(message, process_phone)
+
+# 1. RAQAM TEKSHIRUVI
 def process_phone(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
     
-    # 1-Holat: Mijoz tugmani bosib, kontakt jo'natdi
     if message.contact:
         phone = message.contact.phone_number
         clean_phone = re.sub(r'\D', '', phone)
         
-        # Agar raqam 998 bilan boshlansa qabul qilamiz
         if clean_phone.startswith('998') and len(clean_phone) == 12:
             formatted_phone = f"+{clean_phone[:3]} {clean_phone[3:5]} {clean_phone[5:8]} {clean_phone[8:10]} {clean_phone[10:12]}"
             current_order[message.chat.id]['phone'] = formatted_phone
@@ -127,7 +174,6 @@ def process_phone(message):
             bot.register_next_step_handler(message, process_ice_cream)
             return
         else:
-            # Agar raqam CHET ELNIKI bo'lsa
             current_order[message.chat.id]['allow_manual'] = True
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
             markup.add("❌ Bekor qilish")
@@ -140,7 +186,6 @@ def process_phone(message):
             bot.register_next_step_handler(message, process_phone)
             return
 
-    # 2-Holat: Mijoz matn yozdi (Qo'lda kiritdi)
     elif message.text:
         if current_order.get(message.chat.id, {}).get('allow_manual'):
             clean_phone = re.sub(r'\D', '', message.text)
@@ -159,7 +204,6 @@ def process_phone(message):
             bot.send_message(message.chat.id, "❌ Noto'g'ri O'zbekiston raqami. Qaytadan to'g'ri yozing:")
             bot.register_next_step_handler(message, process_phone)
             return
-        
         else:
             bot.send_message(
                 message.chat.id, 
@@ -253,13 +297,15 @@ def process_location(message):
         order_data = current_order.get(message.chat.id)
         if not order_data: return send_welcome(message)
 
-        user_name = message.from_user.first_name
+        tg_user_name = message.from_user.first_name
         username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
+        receiver_name = order_data['receiver'] 
         current_time = get_uzbekistan_time().strftime("%Y-%m-%d %H:%M")
 
         if message.chat.id not in user_orders: user_orders[message.chat.id] = []
         user_orders[message.chat.id].append({
-            "type": order_data['type'], "qty": order_data['qty'], "unit": order_data['unit'], "date": current_time
+            "type": order_data['type'], "qty": order_data['qty'], "unit": order_data['unit'], 
+            "date": current_time, "receiver": receiver_name
         })
         if message.chat.id in user_status: user_status[message.chat.id]['cancels'] = 0
 
@@ -270,7 +316,8 @@ def process_location(message):
 
         channel_text = (
             "🚨 <b>YANGI BUYURTMA!</b> 🍦\n\n"
-            f"👤 <b>Mijoz:</b> {user_name} ({username})\n"
+            f"👤 <b>Qabul qiluvchi:</b> {receiver_name}\n"
+            f"📱 <b>Buyurtmachi (Tg):</b> {tg_user_name} ({username})\n"
             f"📞 <b>Raqam:</b> {order_data['phone']}\n"
             f"🍨 <b>Muzqaymoq:</b> {order_data['type']}\n"
             f"⚖️ <b>Miqdori:</b> {order_data['qty']} ({order_data['unit']})\n"
