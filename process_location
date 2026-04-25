@@ -1,0 +1,72 @@
+# 6. Lokatsiya, O'zbekiston Chegaralari va Matnni Tekshirish
+def process_location(message):
+    try:
+        if message.text == "❌ Bekor qilish": return cancel_order(message)
+        
+        if message.location:
+            lat = message.location.latitude
+            lon = message.location.longitude
+            
+            # O'zbekistonning taxminiy geografik chegaralari
+            if not (37.0 <= lat <= 45.6 and 56.0 <= lon <= 73.2):
+                bot.send_message(message.chat.id, "❌ Uzr, lekin siz yuborgan joylashuv O'zbekiston hududidan tashqarida. Iltimos, to'g'ri manzil yuboring:")
+                bot.register_next_step_handler(message, process_location)
+                return
+
+            map_link = f"https://maps.google.com/?q={lat},{lon}"
+            location_text = f"<a href='{map_link}'>📍 Xaritada ko'rish</a>"
+        else:
+            # --- YANGI QO'SHILGAN: MATNLI MANZILNI TEKSHIRISH ---
+            address_text = message.text.strip()
+            
+            # Agar matn 8 ta harfdan kam bo'lsa YOKI ichida umuman probel bo'lmasa, uni xato deb hisoblaymiz.
+            if len(address_text) < 8 or ' ' not in address_text:
+                bot.send_message(
+                    message.chat.id, 
+                    "❌ Kiritilgan manzil tushunarsiz yoki juda qisqa!\n\n"
+                    "Iltimos, manzilingizni to'liq va tushunarli qilib yozing.\n"
+                    "(Masalan: <i>Namangan shahar, 6-mikrorayon</i>):",
+                    parse_mode='HTML'
+                )
+                # Xato qilsa, yana manzil so'rash qadamida ushlab turamiz
+                bot.register_next_step_handler(message, process_location)
+                return
+            
+            # Agar tekshiruvdan o'tsa, manzilni qabul qilamiz
+            location_text = address_text
+
+        order_data = current_order.get(message.chat.id)
+        if not order_data: return send_welcome(message)
+
+        user_name = message.from_user.first_name
+        username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
+        current_time = get_uzbekistan_time().strftime("%Y-%m-%d %H:%M")
+
+        if message.chat.id not in user_orders: user_orders[message.chat.id] = []
+        user_orders[message.chat.id].append({
+            "type": order_data['type'], "qty": order_data['qty'], "unit": order_data['unit'], "date": current_time
+        })
+        if message.chat.id in user_status: user_status[message.chat.id]['cancels'] = 0
+
+        bot.send_message(message.chat.id, f"🎉 Rahmat! Buyurtmangiz qabul qilindi.", reply_markup=get_main_menu())
+        
+        if "Karta" in order_data['payment']:
+            bot.send_message(message.chat.id, "💳 Karta: <code>8600 1234 5678 9012</code>\n(Egasi: Ism)", parse_mode='HTML')
+
+        channel_text = (
+            "🚨 <b>YANGI BUYURTMA!</b> 🍦\n\n"
+            f"👤 <b>Mijoz:</b> {user_name} ({username})\n"
+            f"📞 <b>Raqam:</b> {order_data['phone']}\n"
+            f"🍨 <b>Muzqaymoq:</b> {order_data['type']}\n"
+            f"⚖️ <b>Miqdori:</b> {order_data['qty']} ({order_data['unit']})\n"
+            f"💰 <b>To'lov:</b> {order_data['payment']}\n"
+            f"⏰ <b>Vaqti:</b> {current_time}\n"
+            f"🏠 <b>Manzil:</b> {location_text}"
+        )
+        bot.send_message(CHANNEL_USERNAME, channel_text, parse_mode='HTML', disable_web_page_preview=True)
+
+        if message.location: bot.send_location(CHANNEL_USERNAME, message.location.latitude, message.location.longitude)
+        del current_order[message.chat.id]
+
+    except Exception as e:
+        bot.send_message(message.chat.id, "Kechirasiz, xatolik yuz berdi. /start ni bosing.")
