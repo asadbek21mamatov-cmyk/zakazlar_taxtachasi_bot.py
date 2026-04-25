@@ -4,6 +4,7 @@ import logging
 import telebot
 from telebot import types
 from datetime import datetime, timedelta
+import pytz # Vaqt mintaqalari uchun yangi kutubxona
 
 # Loglarni sozlash
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -12,13 +13,20 @@ TOKEN = os.getenv('BOT_TOKEN', '8787588894:AAHo5YdG3H_klIcxmjtKcOj5I-Va0e6sZyI')
 bot = telebot.TeleBot(TOKEN)
 CHANNEL_USERNAME = '@zakaz_taxtachasi'
 
+# O'ZBEKISTON VAQTI
+TASHKENT_TZ = pytz.timezone('Asia/Tashkent')
+
 user_orders = {}
 current_order = {}
 user_status = {}
 
+def get_uzbekistan_time():
+    """Hozirgi O'zbekiston vaqtini qaytaradi"""
+    return datetime.now(TASHKENT_TZ)
+
 def check_ban(chat_id):
     if chat_id in user_status and user_status[chat_id]['ban_until']:
-        if datetime.now() < user_status[chat_id]['ban_until']:
+        if get_uzbekistan_time() < user_status[chat_id]['ban_until']:
             return True 
         else:
             user_status[chat_id]['cancels'] = 0
@@ -31,7 +39,7 @@ def add_cancel(chat_id):
         user_status[chat_id] = {'cancels': 0, 'ban_until': None}
     user_status[chat_id]['cancels'] += 1
     if user_status[chat_id]['cancels'] >= 3:
-        user_status[chat_id]['ban_until'] = datetime.now() + timedelta(hours=1)
+        user_status[chat_id]['ban_until'] = get_uzbekistan_time() + timedelta(hours=1)
         return True 
     return False
 
@@ -43,13 +51,11 @@ def get_main_menu():
 @bot.message_handler(func=lambda message: check_ban(message.chat.id))
 def handle_banned_users(message):
     ban_time = user_status[message.chat.id]['ban_until']
-    left = ban_time - datetime.now()
+    left = ban_time - get_uzbekistan_time()
     minutes = int(left.total_seconds() / 60)
     bot.send_message(
         message.chat.id, 
-        f"🚫 <b>Siz bloklangansiz!</b>\n\n"
-        f"Siz ketma-ket 3 marta buyurtmani bekor qildingiz. "
-        f"1 soatga bloklandingiz.\n⏳ Qolgan vaqt: taxminan {minutes} daqiqa.",
+        f"🚫 <b>Siz bloklangansiz!</b>\n\n1 soatga bloklandingiz.\n⏳ Qolgan vaqt: taxminan {minutes} daqiqa.",
         parse_mode='HTML'
     )
 
@@ -73,7 +79,7 @@ def cancel_order(message):
         cancels = user_status[message.chat.id]['cancels']
         bot.send_message(
             message.chat.id, 
-            f"Buyurtma bekor qilindi.\n⚠️ <i>Ogohlantirish: Siz {cancels}/3 marta bekor qildingiz. 3 marta bo'lsa, 1 soatga bloklanasiz.</i>", 
+            f"Buyurtma bekor qilindi.\n⚠️ <i>Ogohlantirish: Siz {cancels}/3 marta bekor qildingiz.</i>", 
             reply_markup=get_main_menu(), parse_mode='HTML'
         )
 
@@ -85,7 +91,7 @@ def handle_menu_clicks(message):
     if message.text == "📜 Zakaz tarixi":
         history = user_orders.get(message.chat.id, [])
         if not history:
-            bot.send_message(message.chat.id, "Sizda hali buyurtmalar tarixi yo'q 😔", reply_markup=get_main_menu())
+            bot.send_message(message.chat.id, "Sizda hali buyurtmalar tarixi yo'q", reply_markup=get_main_menu())
         else:
             text = "<b>Sizning tarixingiz:</b>\n\n"
             for i, order in enumerate(history, 1):
@@ -103,22 +109,36 @@ def handle_menu_clicks(message):
         bot.send_message(message.chat.id, "Boshladik! Telefon raqamingizni yuboring:", reply_markup=markup)
         bot.register_next_step_handler(message, process_phone)
 
-# 1. Raqam
+# 1. Raqam va Kodlarni Tekshirish (YANGI!)
 def process_phone(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
+    
     phone = message.contact.phone_number if message.contact else message.text
     clean_phone = re.sub(r'\D', '', phone) if phone else ""
+    
+    # O'zbekiston operator kodlari ro'yxati
+    valid_uz_codes = ['90', '91', '93', '94', '95', '97', '98', '99', '88', '33', '55', '77']
+    
     if len(clean_phone) >= 9:
-        if len(clean_phone) == 9: clean_phone = '998' + clean_phone
-        formatted_phone = f"+{clean_phone[:3]} {clean_phone[3:5]} {clean_phone[5:8]} {clean_phone[8:10]} {clean_phone[10:12]}"
-        current_order[message.chat.id]['phone'] = formatted_phone
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        markup.add("🍫 Shokoladli", "🍓 Qulupnayli", "🍦 Vanilli", "🍋 Limonli", "🎂 Plombir", "❌ Bekor qilish")
-        bot.send_message(message.chat.id, "✅ Qabul qilindi.\n🍨 Qanday muzqaymoq xohlaysiz?", reply_markup=markup)
-        bot.register_next_step_handler(message, process_ice_cream)
-    else:
-        bot.send_message(message.chat.id, "❌ Noto'g'ri raqam. Qaytadan kiriting:")
-        bot.register_next_step_handler(message, process_phone)
+        if len(clean_phone) == 9: 
+            clean_phone = '998' + clean_phone
+            
+        if len(clean_phone) == 12 and clean_phone.startswith('998'):
+            operator_code = clean_phone[3:5] # 998 dan keyingi ikkita raqam (kod)
+            
+            # Agar kod ro'yxatda bo'lsa (haqiqiy o'zbek raqami)
+            if operator_code in valid_uz_codes:
+                formatted_phone = f"+{clean_phone[:3]} {clean_phone[3:5]} {clean_phone[5:8]} {clean_phone[8:10]} {clean_phone[10:12]}"
+                current_order[message.chat.id]['phone'] = formatted_phone
+                
+                markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+                markup.add("🍫 Shokoladli", "🍓 Qulupnayli", "🍦 Vanilli", "🍋 Limonli", "🎂 Plombir", "❌ Bekor qilish")
+                bot.send_message(message.chat.id, "✅ Raqam qabul qilindi.\n🍨 Qanday muzqaymoq xohlaysiz?", reply_markup=markup)
+                bot.register_next_step_handler(message, process_ice_cream)
+                return
+
+    bot.send_message(message.chat.id, "❌ Noto'g'ri yoki chet el raqami! Iltimos, faqat O'zbekiston raqamini kiriting:")
+    bot.register_next_step_handler(message, process_phone)
 
 # 2. Muzqaymoq turi
 def process_ice_cream(message):
@@ -137,96 +157,84 @@ def process_unit(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     markup.add("❌ Bekor qilish")
     if unit == "Dona":
-        bot.send_message(message.chat.id, "Necha dona xohlaysiz? (Faqat raqam yozing, masalan: 10):", reply_markup=markup)
+        bot.send_message(message.chat.id, "Necha dona xohlaysiz? (Faqat raqam yozing):", reply_markup=markup)
     else:
-        bot.send_message(message.chat.id, "Necha kilogramm xohlaysiz? (Faqat raqam yozing, masalan: 1.5):", reply_markup=markup)
+        bot.send_message(message.chat.id, "Necha kilogramm xohlaysiz? (Faqat raqam yozing):", reply_markup=markup)
     bot.register_next_step_handler(message, process_quantity)
 
-# 4. Miqdor (HARFLAR TAQIQLANDI)
+# 4. Miqdor
 def process_quantity(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
-    
-    # Kiritilgan matnni raqam ekanligini tekshiramiz
-    qty_text = message.text.replace(',', '.').strip() # Vergulni nuqtaga almashtiramiz (1,5 -> 1.5)
+    qty_text = message.text.replace(',', '.').strip()
     try:
-        val = float(qty_text) # Agar bu yerda harf bo'lsa, xatolik berib except blokiga o'tadi
-        if val <= 0:
-            raise ValueError
+        val = float(qty_text)
+        if val <= 0: raise ValueError
     except ValueError:
-        bot.send_message(message.chat.id, "❌ Noto'g'ri! Iltimos, **faqat raqam** kiriting (harflarsiz).\nMasalan: 2 yoki 1.5:")
-        # Xato qilsa yana shu funksiyani o'ziga qaytaramiz
+        bot.send_message(message.chat.id, "❌ Noto'g'ri! Iltimos, **faqat raqam** kiriting.")
         bot.register_next_step_handler(message, process_quantity)
         return
 
-    # Agar raqam to'g'ri bo'lsa, xotiraga yozamiz
     current_order[message.chat.id]['qty'] = qty_text
-
-    # YANGI QADAM: To'lov usulini so'rash
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("💵 Naqd pul", "💳 Karta orqali", "❌ Bekor qilish")
     bot.send_message(message.chat.id, "To'lovni qanday amalga oshirasiz?", reply_markup=markup)
     bot.register_next_step_handler(message, process_payment)
 
-# 5. To'lov usuli
+# 5. To'lov
 def process_payment(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
-    
     current_order[message.chat.id]['payment'] = message.text
-    
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    markup.add(types.KeyboardButton("📍 Joylashuvni yuborish (Avtomat)", request_location=True), "❌ Bekor qilish")
-    bot.send_message(message.chat.id, "Manzilingizni yuboring (Tugmani bosing yoki yozing):", reply_markup=markup)
+    markup.add(types.KeyboardButton("📍 Joylashuvni yuborish", request_location=True), "❌ Bekor qilish")
+    bot.send_message(message.chat.id, "Manzilingizni yuboring:", reply_markup=markup)
     bot.register_next_step_handler(message, process_location)
 
-# 6. Lokatsiya va Yakunlash
+# 6. Lokatsiya va O'zbekiston Chegaralarini Tekshirish (YANGI!)
 def process_location(message):
     try:
         if message.text == "❌ Bekor qilish": return cancel_order(message)
         
         if message.location:
-            map_link = f"https://maps.google.com/?q={message.location.latitude},{message.location.longitude}"
+            lat = message.location.latitude
+            lon = message.location.longitude
+            
+            # O'zbekistonning taxminiy geografik chegaralari (Kenglik: 37° - 45°, Uzunlik: 56° - 73°)
+            if not (37.0 <= lat <= 45.6 and 56.0 <= lon <= 73.2):
+                bot.send_message(message.chat.id, "❌ Uzr, lekin siz yuborgan joylashuv O'zbekiston hududidan tashqarida. Iltimos, to'g'ri manzil yuboring:")
+                bot.register_next_step_handler(message, process_location)
+                return
+
+            map_link = f"https://maps.google.com/?q={lat},{lon}"
             location_text = f"<a href='{map_link}'>📍 Xaritada ko'rish</a>"
         else:
             location_text = message.text
 
         order_data = current_order.get(message.chat.id)
-        if not order_data:
-            send_welcome(message)
-            return
+        if not order_data: return send_welcome(message)
 
         user_name = message.from_user.first_name
         username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+        # Vaqtni O'zbekistonga to'g'irladik
+        current_time = get_uzbekistan_time().strftime("%Y-%m-%d %H:%M")
 
         if message.chat.id not in user_orders: user_orders[message.chat.id] = []
         user_orders[message.chat.id].append({
             "type": order_data['type'], "qty": order_data['qty'], "unit": order_data['unit'], "date": current_time
         })
-
         if message.chat.id in user_status: user_status[message.chat.id]['cancels'] = 0
 
-        # Mijozga yuboriladigan tasdiq xabari
-        bot.send_message(message.chat.id, f"🎉 Rahmat, {user_name}! Buyurtmangiz qabul qilindi.\nKuryer tez orada yetib boradi.", reply_markup=get_main_menu())
+        bot.send_message(message.chat.id, f"🎉 Rahmat! Buyurtmangiz qabul qilindi.", reply_markup=get_main_menu())
         
-        # Agar karta tanlagan bo'lsa karta raqam tashlaymiz
         if "Karta" in order_data['payment']:
-            bot.send_message(
-                message.chat.id, 
-                "💳 To'lov uchun karta raqamimiz:\n\n"
-                "<code>8600 1234 5678 9012</code>\n"  # Shu yerga o'z karta raqamingizni yozing
-                "(Egasi: Ismingizni Yozing)\n\n"
-                "Iltimos, to'lovni amalga oshiring.", 
-                parse_mode='HTML'
-            )
+            bot.send_message(message.chat.id, "💳 Karta: <code>8600 1234 5678 9012</code>\n(Egasi: Ism)", parse_mode='HTML')
 
-        # Kanalga yuboriladigan matn
         channel_text = (
             "🚨 <b>YANGI BUYURTMA!</b> 🍦\n\n"
             f"👤 <b>Mijoz:</b> {user_name} ({username})\n"
             f"📞 <b>Raqam:</b> {order_data['phone']}\n"
             f"🍨 <b>Muzqaymoq:</b> {order_data['type']}\n"
             f"⚖️ <b>Miqdori:</b> {order_data['qty']} ({order_data['unit']})\n"
-            f"💰 <b>To'lov turi:</b> {order_data['payment']}\n"
+            f"💰 <b>To'lov:</b> {order_data['payment']}\n"
             f"⏰ <b>Vaqti:</b> {current_time}\n"
             f"🏠 <b>Manzil:</b> {location_text}"
         )
@@ -236,9 +244,7 @@ def process_location(message):
         del current_order[message.chat.id]
 
     except Exception as e:
-        logging.error(f"Xatolik: {e}")
         bot.send_message(message.chat.id, "Kechirasiz, xatolik yuz berdi. /start ni bosing.")
 
 if __name__ == '__main__':
-    logging.info("Muzqaymoq boti ishga tushdi...")
     bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
