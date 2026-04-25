@@ -304,7 +304,7 @@ def process_location(message):
         bot.send_message(message.chat.id, f"🎉 Rahmat! Buyurtmangiz qabul qilindi.", reply_markup=get_main_menu())
         
         if "Karta" in order_data['payment']:
-            bot.send_message(message.chat.id, "💳 Karta: <code>8600 1234 5678 9012</code>\n(Egasi: Ism)", parse_mode='HTML')
+            bot.send_message(message.chat.id, "💳 Karta: <code>4916 9903 2004 8603</code>\n(Egasi: Ism)", parse_mode='HTML')
 
         channel_text = (
             "🚨 <b>YANGI BUYURTMA (Web App)!</b> 🍦\n\n"
