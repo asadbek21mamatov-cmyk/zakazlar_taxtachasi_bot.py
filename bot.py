@@ -100,7 +100,6 @@ def handle_menu_clicks(message):
         cancel_order(message)
         
     elif message.text == "🛒 Yangi buyurtma":
-        # Yangi zakaz boshlanganda qo'lda yozish ruxsatini o'chirib qo'yamiz
         current_order[message.chat.id] = {'allow_manual': False}
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         markup.add(types.KeyboardButton("📱 Telefon raqamni yuborish", request_contact=True))
@@ -108,33 +107,25 @@ def handle_menu_clicks(message):
         bot.send_message(message.chat.id, "Boshladik! Pastdagi tugma orqali telefon raqamingizni yuboring:", reply_markup=markup)
         bot.register_next_step_handler(message, process_phone)
 
-# 1. KUCHAYTIRILGAN RAQAM TEKSHIRUVI
+# 1. SODDALASHTIRILGAN RAQAM TEKSHIRUVI
 def process_phone(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
-    
-    valid_uz_codes = ['90', '91', '92', '93', '94', '95', '97', '98', '99', '88', '33', '55', '77']
     
     # 1-Holat: Mijoz tugmani bosib, kontakt jo'natdi
     if message.contact:
         phone = message.contact.phone_number
         clean_phone = re.sub(r'\D', '', phone)
         
-        # Agar raqam O'zbekistonniki bo'lsa
+        # Agar raqam 998 bilan boshlansa qabul qilamiz
         if clean_phone.startswith('998') and len(clean_phone) == 12:
-            operator_code = clean_phone[3:5]
-            if operator_code in valid_uz_codes:
-                formatted_phone = f"+{clean_phone[:3]} {clean_phone[3:5]} {clean_phone[5:8]} {clean_phone[8:10]} {clean_phone[10:12]}"
-                current_order[message.chat.id]['phone'] = formatted_phone
-                
-                markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-                markup.add("🍫 Shokoladli", "🍓 Qulupnayli", "🍦 Vanilli", "🍋 Limonli", "🎂 Plombir", "❌ Bekor qilish")
-                bot.send_message(message.chat.id, "✅ Raqam qabul qilindi.\n🍨 Qanday muzqaymoq xohlaysiz?", reply_markup=markup)
-                bot.register_next_step_handler(message, process_ice_cream)
-                return
-            else:
-                bot.send_message(message.chat.id, "❌ Noto'g'ri O'zbekiston operatori. Qaytadan urinib ko'ring:")
-                bot.register_next_step_handler(message, process_phone)
-                return
+            formatted_phone = f"+{clean_phone[:3]} {clean_phone[3:5]} {clean_phone[5:8]} {clean_phone[8:10]} {clean_phone[10:12]}"
+            current_order[message.chat.id]['phone'] = formatted_phone
+            
+            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+            markup.add("🍫 Shokoladli", "🍓 Qulupnayli", "🍦 Vanilli", "🍋 Limonli", "🎂 Plombir", "❌ Bekor qilish")
+            bot.send_message(message.chat.id, "✅ Raqam qabul qilindi.\n🍨 Qanday muzqaymoq xohlaysiz?", reply_markup=markup)
+            bot.register_next_step_handler(message, process_ice_cream)
+            return
         else:
             # Agar raqam CHET ELNIKI bo'lsa
             current_order[message.chat.id]['allow_manual'] = True
@@ -151,29 +142,25 @@ def process_phone(message):
 
     # 2-Holat: Mijoz matn yozdi (Qo'lda kiritdi)
     elif message.text:
-        # Agar mijozga chet elniki bo'lgani uchun qo'lda yozishga ruxsat berilgan bo'lsa
         if current_order.get(message.chat.id, {}).get('allow_manual'):
             clean_phone = re.sub(r'\D', '', message.text)
             if len(clean_phone) >= 9:
                 if len(clean_phone) == 9: clean_phone = '998' + clean_phone
                 if len(clean_phone) == 12 and clean_phone.startswith('998'):
-                    operator_code = clean_phone[3:5]
-                    if operator_code in valid_uz_codes:
-                        formatted_phone = f"+{clean_phone[:3]} {clean_phone[3:5]} {clean_phone[5:8]} {clean_phone[8:10]} {clean_phone[10:12]}"
-                        current_order[message.chat.id]['phone'] = formatted_phone
-                        
-                        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-                        markup.add("🍫 Shokoladli", "🍓 Qulupnayli", "🍦 Vanilli", "🍋 Limonli", "🎂 Plombir", "❌ Bekor qilish")
-                        bot.send_message(message.chat.id, "✅ Raqam qabul qilindi.\n🍨 Qanday muzqaymoq xohlaysiz?", reply_markup=markup)
-                        bot.register_next_step_handler(message, process_ice_cream)
-                        return
+                    formatted_phone = f"+{clean_phone[:3]} {clean_phone[3:5]} {clean_phone[5:8]} {clean_phone[8:10]} {clean_phone[10:12]}"
+                    current_order[message.chat.id]['phone'] = formatted_phone
+                    
+                    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+                    markup.add("🍫 Shokoladli", "🍓 Qulupnayli", "🍦 Vanilli", "🍋 Limonli", "🎂 Plombir", "❌ Bekor qilish")
+                    bot.send_message(message.chat.id, "✅ Raqam qabul qilindi.\n🍨 Qanday muzqaymoq xohlaysiz?", reply_markup=markup)
+                    bot.register_next_step_handler(message, process_ice_cream)
+                    return
             
             bot.send_message(message.chat.id, "❌ Noto'g'ri O'zbekiston raqami. Qaytadan to'g'ri yozing:")
             bot.register_next_step_handler(message, process_phone)
             return
         
         else:
-            # Agar ruxsat yo'q bo'lsa (Mijoz tugmani bosmasdan ayyorlik qilayotgan bo'lsa)
             bot.send_message(
                 message.chat.id, 
                 "❌ Iltimos, raqamni qo'lda yozmang!\n"
