@@ -15,6 +15,9 @@ CHANNEL_USERNAME = '@zakaz_taxtachasi'
 
 TASHKENT_TZ = pytz.timezone('Asia/Tashkent')
 
+# Bizdagi mavjud muzqaymoq turlari (Shundan boshqasi o'tmaydi)
+VALID_ICE_CREAMS = ["🍫 Shokoladli", "🍓 Qulupnayli", "🍦 Vanilli", "🍋 Limonli", "🎂 Plombir"]
+
 user_orders = {}
 current_order = {}
 user_status = {}
@@ -176,7 +179,8 @@ def process_phone(message):
             current_order[message.chat.id]['phone'] = formatted_phone
             
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-            markup.add("🍫 Shokoladli", "🍓 Qulupnayli", "🍦 Vanilli", "🍋 Limonli", "🎂 Plombir", "❌ Bekor qilish")
+            markup.add(*VALID_ICE_CREAMS)
+            markup.add("❌ Bekor qilish")
             bot.send_message(message.chat.id, "✅ Raqam qabul qilindi.\n🍨 Qanday muzqaymoq xohlaysiz?", reply_markup=markup)
             bot.register_next_step_handler(message, process_ice_cream)
             return
@@ -203,7 +207,8 @@ def process_phone(message):
                     current_order[message.chat.id]['phone'] = formatted_phone
                     
                     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-                    markup.add("🍫 Shokoladli", "🍓 Qulupnayli", "🍦 Vanilli", "🍋 Limonli", "🎂 Plombir", "❌ Bekor qilish")
+                    markup.add(*VALID_ICE_CREAMS)
+                    markup.add("❌ Bekor qilish")
                     bot.send_message(message.chat.id, "✅ Raqam qabul qilindi.\n🍨 Qanday muzqaymoq xohlaysiz?", reply_markup=markup)
                     bot.register_next_step_handler(message, process_ice_cream)
                     return
@@ -221,8 +226,20 @@ def process_phone(message):
             bot.register_next_step_handler(message, process_phone)
             return
 
+# 2. MUZQAYMOQ TURINI QATTIQ TEKSHIRISH
 def process_ice_cream(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
+    
+    # Agar mijoz menyuda yo'q narsani yozsa (Masalan Pomidorli)
+    if message.text not in VALID_ICE_CREAMS:
+        bot.send_message(
+            message.chat.id, 
+            "❌ Bunday muzqaymoq yo'q!\nIltimos, faqat pastdagi tugmalardan birini tanlang:"
+        )
+        # Qaytadan so'raymiz
+        bot.register_next_step_handler(message, process_ice_cream)
+        return
+
     current_order[message.chat.id]['type'] = message.text
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("📦 Dona", "⚖️ Kilogramm (kg)", "❌ Bekor qilish")
@@ -231,22 +248,51 @@ def process_ice_cream(message):
 
 def process_unit(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
+    
+    # Agar o'lchov ham noto'g'ri kiritilsa himoya qilib qo'yamiz
+    if message.text not in ["📦 Dona", "⚖️ Kilogramm (kg)"]:
+        bot.send_message(message.chat.id, "❌ Iltimos, faqat 'Dona' yoki 'Kilogramm' tugmasini bosing!")
+        bot.register_next_step_handler(message, process_unit)
+        return
+
     unit = "Dona" if "Dona" in message.text else "kg"
     current_order[message.chat.id]['unit'] = unit
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     markup.add("❌ Bekor qilish")
     if unit == "Dona":
-        bot.send_message(message.chat.id, "Necha dona xohlaysiz? (Faqat raqam yozing):", reply_markup=markup)
+        bot.send_message(message.chat.id, "Necha dona xohlaysiz? (Faqat butun raqam yozing, masalan: 5):", reply_markup=markup)
     else:
-        bot.send_message(message.chat.id, "Necha kilogramm xohlaysiz? (Faqat raqam yozing):", reply_markup=markup)
+        bot.send_message(message.chat.id, "Necha kilogramm xohlaysiz? (Faqat raqam yozing, masalan: 1.5):", reply_markup=markup)
     bot.register_next_step_handler(message, process_quantity)
 
+# 3. MIQDORNI QATTIQ TEKSHIRISH (Dona va KG uchun alohida)
 def process_quantity(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
     qty_text = message.text.replace(',', '.').strip()
+    unit = current_order[message.chat.id]['unit']
+
     try:
         val = float(qty_text)
-        if val <= 0: raise ValueError
+        
+        # Agar "Dona" tanlagan bo'lsa
+        if unit == "Dona":
+            if not val.is_integer(): # 1.5 dona deb bo'lmaydi
+                bot.send_message(message.chat.id, "❌ Dona butun son bo'lishi kerak! Masalan: 1, 5, 10.")
+                bot.register_next_step_handler(message, process_quantity)
+                return
+            if val < 1 or val > 500: # 0 dona yoki 1000 dona deb xato qilmasligi uchun
+                bot.send_message(message.chat.id, "❌ Miqdor 1 dan 500 gacha bo'lishi kerak.")
+                bot.register_next_step_handler(message, process_quantity)
+                return
+            qty_text = str(int(val)) # Butun songa aylantirib yozamiz
+            
+        # Agar "Kilogramm" tanlagan bo'lsa
+        else:
+            if val < 0.1 or val > 50: # 0.1 kg (100gr) dan 50 kg gacha
+                bot.send_message(message.chat.id, "❌ Kilogramm 0.1 dan 50 gacha bo'lishi kerak.")
+                bot.register_next_step_handler(message, process_quantity)
+                return
+
     except ValueError:
         bot.send_message(message.chat.id, "❌ Noto'g'ri! Iltimos, **faqat raqam** kiriting.")
         bot.register_next_step_handler(message, process_quantity)
@@ -260,6 +306,12 @@ def process_quantity(message):
 
 def process_payment(message):
     if message.text == "❌ Bekor qilish": return cancel_order(message)
+    
+    if message.text not in ["💵 Naqd pul", "💳 Karta orqali"]:
+        bot.send_message(message.chat.id, "❌ Iltimos, faqat 'Naqd pul' yoki 'Karta orqali' tugmasini bosing!")
+        bot.register_next_step_handler(message, process_payment)
+        return
+
     current_order[message.chat.id]['payment'] = message.text
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     markup.add(types.KeyboardButton("📍 Joylashuvni yuborish (Avtomat)", request_location=True), "❌ Bekor qilish")
@@ -270,17 +322,14 @@ def process_payment(message):
     )
     bot.register_next_step_handler(message, process_location)
 
-# 6. FAQAT TUGMA ORQALI LOKATSIYA QABUL QILISH
 def process_location(message):
     try:
         if message.text == "❌ Bekor qilish": return cancel_order(message)
         
-        # 1-holat: Agar haqiqatdan ham lokatsiya (GPS xarita) yuborgan bo'lsa
         if message.location:
             lat = message.location.latitude
             lon = message.location.longitude
             
-            # O'zbekiston chegaralarini tekshirish
             if not (37.0 <= lat <= 45.6 and 56.0 <= lon <= 73.2):
                 bot.send_message(message.chat.id, "❌ Uzr, lekin siz yuborgan joylashuv O'zbekiston hududidan tashqarida. Iltimos, to'g'ri manzil yuboring:")
                 bot.register_next_step_handler(message, process_location)
@@ -289,7 +338,6 @@ def process_location(message):
             map_link = f"https://maps.google.com/?q={lat},{lon}"
             location_text = f"<a href='{map_link}'>📍 Xaritada ko'rish</a>"
             
-        # 2-holat: Agar mijoz o'jarlik qilib MATN yozib yuborgan bo'lsa
         else:
             bot.send_message(
                 message.chat.id, 
@@ -297,11 +345,9 @@ def process_location(message):
                 "Iltimos, pastdagi <b>'📍 Joylashuvni yuborish'</b> tugmasini bosing:",
                 parse_mode='HTML'
             )
-            # Yana shu qadamga qaytarib qo'yamiz (Kutilaveradi)
             bot.register_next_step_handler(message, process_location)
             return
 
-        # Lokatsiya to'g'ri bo'lsa, davom etamiz
         order_data = current_order.get(message.chat.id)
         if not order_data: return send_welcome(message)
 
