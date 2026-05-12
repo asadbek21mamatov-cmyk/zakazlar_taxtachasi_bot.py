@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Store</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: var(--tg-theme-bg-color, #ffffff);
+            --hint: var(--tg-theme-hint-color, #999999);
+            --text: var(--tg-theme-text-color, #000000);
+            --button: var(--tg-theme-button-color, #2481cc);
+            --button-text: var(--tg-theme-button-text-color, #ffffff);
+            --secondary-bg: var(--tg-theme-secondary-bg-color, #f4f4f5);
+        }
+        body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .item-card { background: var(--secondary-bg); padding: 10px; border-radius: 15px; text-align: center; cursor: pointer; transition: 0.2s; }
+        .item-card:active { transform: scale(0.95); }
+        .item-img { width: 100%; border-radius: 10px; height: 120px; object-fit: cover; background: #ddd; display: flex; align-items: center; justify-content: center; font-size: 40px; }
+        .item-title { font-weight: bold; margin: 8px 0 4px; font-size: 14px; height: 34px; overflow: hidden; }
+        .item-price { color: var(--button); font-weight: bold; font-size: 15px; }
+        
+        /* 🔴 TUGAGAN MAHSULOTLAR UCHUN DIZAYN */
+        .out-of-stock {
+            filter: grayscale(100%);
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        .sold-out-text {
+            color: #ff4d4d;
+            font-weight: bold;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        /* Batafsil ma'lumot oynasi */
+        #detail-view { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 100; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        .detail-header { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; color: var(--button); cursor: pointer; font-weight: bold; }
+        .detail-img { width: 100%; max-height: 300px; border-radius: 15px; background: var(--secondary-bg); display: block; object-fit: contain; }
+        .section-title { font-weight: bold; margin: 15px 0 5px; color: var(--hint); text-transform: uppercase; font-size: 12px; }
+        .controls { display: flex; align-items: center; justify-content: center; gap: 20px; margin-top: 30px; margin-bottom: 30px; }
+        .btn-round { width: 45px; height: 45px; border-radius: 50%; border: none; background: var(--button); color: var(--button-text); font-size: 24px; cursor: pointer; }
+        .btn-round:active { transform: translateY(2px); }
+    </style>
+</head>
+<body>
+
+<div id="main-view">
+    <h2 id="user-greeting">Xush kelibsiz!</h2>
+    <div class="grid" id="product-grid"></div>
+</div>
+
+<div id="detail-view">
+    <div class="detail-header" onclick="closeDetail()">⬅️ Orqaga</div>
+    <div id="detail-content"></div>
+</div>
+
+<script>
+    let tg = window.Telegram.WebApp;
+    tg.expand();
+    
+    if (tg.initDataUnsafe.user) {
+        document.getElementById('user-greeting').innerText = `Xush kelibsiz, ${tg.initDataUnsafe.user.first_name}!`;
+    }
+
+    // MAHSULOTLAR BAZASI
+    const products = [
+        {
+            id: 1, 
+            name: "LEBELAGE Cleansing Foam", 
+            price: 100000, 
+            image: "https://d1flfk77wl2xk4.cloudfront.net/Assets/73/425/XXL_p0216842573.jpg",
+            desc: "Guruch ekstrakti bilan boyitilgan penka terini namlaydi, tinchlantiradi va yorqinlashtiradi.",
+            usage: "Barcha turdagi terilar, jumladan, sezgir terilar uchun ham mos keladi. Kirlar va makiyaj qoldiqlarini samarali tozalaydi.",
+            stock: 100 // Omborda bor
+        },
+        {
+            id: 2, 
+            name: "ILDONG Foodis HiMilk", 
+            price: 15000, 
+            image: "https://img.kr.gcp-karroter.net/origin/article/202604/5bb3f66592b49864587b04b9d00902a9143d258c4439045e6cbc568eb9713511_0.webp?f=webp&q=95&s=720x720&service=webapp&t=inside",
+            desc: "ILDONG Foodis HiMilk — mol ogʻiz suti (1%), akula togʻay kukuni, kalsiy, leytsin hamda 20 xil vitamin va minerallar bilan boyitilgan, mushak va suyaklarni mustahkamlovchi kattalar uchun muvozanatlashgan sut kukunidir.",
+            usage: "Qariyalar juda foydali. Kasallikdan keyin tiklanayotganlar juda foydali. Ishtaha past odamlarda foydali. Sport bilan shug‘ullanmaydigan, ammo oqsilga ehtiyoj bor bo‘lganlar uchun foydali.",
+            stock: 100 // Omborda yo'q
+        },
+        {
+            id: 3, // Agar 3-raqam band bo'lsa, 4 deb yozing
+            name: "Lagom Mini To'plami (Nabor)", 
+            price: 150000, // Narxni o'zingizga moslab o'zgartiring
+            image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTvjl60p4JfnL0-bP0ybBQNGKh-2plaNFFCvQ&s",
+            desc: "Ushbu ixcham va qulay Lagom to'plami yuz terisini mukammal parvarish qilish uchun eng zarur vositalarni o'z ichiga oladi.<br><br><b>To'plam tarkibi:</b><br>• 2 xil tozalovchi penka<br>• Namlantiruvchi va tinchlantiruvchi Toner<br>• Terini oziqlantiruvchi Serum<br>• Himoya qiluvchi Krem",
+            usage: "<b>Ishlatish ketma-ketligi (Ertalab/Kechqurun):</b><br>1. Penka yordamida yuzingizni kirlardan tozalang va yuving.<br>2. Tonerni paxta yostig'iga yoki qo'lga quyib, yuzingizga surting.<br>3. Bir necha tomchi serumni yuz terisiga yengil harakatlar bilan singdiring.<br>4. Oxirgi qadam sifatida yuzga krem surtib, namlikni muhrlang.",
+            stock: 100 // Example stock value
+        },
+        {
+            id: 4, 
+            name: "Chanel Parfyumlar To'plami", 
+            price: 500000, 
+            image: "https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcQI_Pa99j2NMIvhkT_aOPnT-QyhqAVlcMUq40Kr-XVkyxH4uO8S",
+            desc: "Mashhur Chanel brendining 5 xil eng sara va klassik iforlaridan iborat eksklyuziv mini-to'plam.<br><br><b>Tarkibi:</b><br>N°5, Chance, Chance Eau Tendre, Chance Eau Fraiche, Coco Mademoiselle.",
+            usage: "Bo'yin, bilak va quloq orqasiga oz miqdorda surting. Har kunlik va maxsus oqshomlar uchun ajoyib tanlov.",
+            stock: 100
+        },
+        {
+            id: 5, 
+            name: "Jo Malone London To'plami", 
+            price: 500000, 
+            image: "https://media.johnlewiscontent.com/i/JohnLewis/237295917?fmt=auto&$background-off-white$&$rsp-pdp-port",
+            desc: "Jo Malone London brendining 5 xil takrorlanmas, nafis va uzoq saqlanuvchi iforlaridan iborat maxsus to'plam.",
+            usage: "Tananing puls uradigan nuqtalariga seping. O'zgacha va faqat o'zingizga xos ifor yaratish uchun bir nechta hidlarni aralashtirib ishlatsangiz ham bo'ladi.",
+            stock: 100
+        },
+        {
+            id: 6, 
+            name: "Dior Ayollar Parfyumi To'plami", 
+            price: 450000, 
+            image: "https://images.uzum.uz/d52pvr3tqdhua1utj2h0/original.jpg",
+            desc: "Dior modalar uyining eng ko'p sotiladigan 4 xil nafis iforlari jamlangan ajoyib sovg'a to'plami.<br><br><b>Tarkibi:</b><br>Joy, Dior Addict, Miss Dior, J'adore.",
+            usage: "Toza teriga yoki kiyimga oz miqdorda purkang. Kun davomida o'zingizni jozibali va xotirjam his qilasiz.",
+            stock: 100
+        },
+        {
+            id: 7, 
+            name: "Hermès Mini Iforlar To'plami", 
+            price: 450000, 
+            image: "data:image/jpeg;base64,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", 
+            desc: "Fransuz nafisligini o'zida mujassam etgan Hermès brendining 4 xil betakror va yorqin iforlar to'plami.",
+            usage: "Ertalab yoki kechqurun toza teriga surting. Issiq ob-havoda ham, salqin kunlarda ham o'z iforini yo'qotmaydi.",
+            stock: 100
+        },
+        {
+            id: 8, 
+            name: "MeLoSö 3 in 1 Collagen Cream", 
+            price: 80000, 
+            image: "https://images.uzum.uz/csn2m4j4nkdp9ake8ojg/original.jpg", 
+            desc: "3 tasi 1 da bo'lgan MeLoSö brendiga tegishli kollagen krem. O'zida toner, essensiya, losyon va kremni mujassam etgan. Dengiz kollageni bilan boyitilgan bo'lib, terining elastikligi va mustahkamligini oshiradi.",
+            usage: "Terini namlash, oziqlantirish va yoshartirish uchun mo'ljallangan. Ajinlarni kamaytirishga yordam beradi.",
+            stock: 100
+        },
+        {
+            id: 9, 
+            name: "MeLoSö 3 in 1 Cica Cream", 
+            price: 80000, 
+            image: "https://bb-mania.kz/userfiles/shop/large/3/26866_3-in-1-all-in-one-cica-cream-meloso.jpg", 
+            desc: "Toner, losyon, essensiya va krem vazifasini bajaruvchi 3-in-1 universal tinchlantiruvchi krem. Tarkibida sentella ekstrakti mavjud bo'lib, hujayralar regeneratsiyasini rag'batlantiradi.",
+            usage: "Terining qizarishi va tirnash xususiyatini kamaytirishga yordam beradi. Tinchlantiruvchi va oziqlantiruvchi xususiyatlarga ega.",
+            stock: 100
+        },
+        {
+            id: 10, 
+            name: "MeLoSö 3 in 1 Lacto Probio Cream", 
+            price: 80000, 
+            image: "https://avatars.mds.yandex.net/get-mpic/14622206/2a00000196baa1df36efd1cc2a47cd573c63/orig", 
+            desc: "Laktobakteriyalar va probiotiklar bilan boyitilgan 3-in-1 ko'p funksiyali krem. U terining mikroflorasini tiklashga yordam beradi.",
+            usage: "Yuz terisini oqartirish, oziqlantirish va namlantirish uchun mo'ljallangan. Terini yanada yorqin, elastik va sog'lom qiladi.",
+            stock: 100
+        },
+        {
+            id: 11, 
+            name: "Melasma-X AHA BHA Foam Cleansing", 
+            price: 80000, 
+            image: "https://bk.shajgoj.com/storage/2024/12/12668.jpg", 
+            desc: "AHA va BHA kislotalari, shuningdek, moringa barglari ekstrakti bilan boyitilgan yuzni chuqur tozalovchi ko'pik.",
+            usage: "Yog'li va muammoli teri uchun ayniqsa foydali. Terini muloyimlik bilan tozalaydi, o'lik hujayralarni tushiradi va dog'larni yengillashtirib, terini silliq qiladi.",
+            stock: 100
+        },
+        {
+            id: 12, 
+            name: "Round Lab Mini To'plami", 
+            price: 100000, 
+            image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRDniULttb0PTaEoAgpT_Tcv0pQKFTor8wpVg&s", 
+            desc: "Mashhur Koreya brendi Round Lab'ning eng sara mahsulotlaridan iborat qulay mini-to'plam. Terini intensiv namlash va tinchlantirish uchun ideal.",
+            usage: "To'plamdagi vositalarni tozalash - tonizatsiya - namlash ketma-ketligida ertalab va kechqurun ishlating.",
+            stock: 100
+        },
+        {
+            id: 13, 
+            name: "Feramonli Intim Atir", 
+            price: 125000, 
+            image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTYNqajJXokeO7GGJ9xuM8V6or7754gtGWDGQ&s", 
+            desc: "O'ziga jalb qiluvchi feramonlar bilan boyitilgan, kun davomida o'zgacha joziba va xushbo'y ifor baxsh etuvchi maxsus intim atir.",
+            usage: "Toza teriga yoki kiyimga oz miqdorda purkang. Shaxsiy gigiyenadan so'ng foydalanish tavsiya etiladi.",
+            stock: 100
+        },
+        {
+            id: 14, 
+            name: "CC Cream", 
+            price: 125000, 
+            image: "https://images.uzum.uz/crvdq5ssslojjk5r45bg/original.jpg", 
+            desc: "Terining rangini tekislovchi, kamchiliklarni yashiruvchi va chuqur namlantiruvchi yengil teksturali CC krem.",
+            usage: "Terini tozalab, namlantirgandan so'ng, kremni yuzga bir tekisda surting. Kunlik makiyaj uchun ideal baza.",
+            stock: 100
+        },
+        {
+            id: 15, 
+            name: "Snail Moisture Foot Cream", 
+            price: 30000, 
+            image: "https://images.uzum.uz/d68vj91e6ph7gqpi8570/original.jpg", 
+            desc: "Shilliqqurt (Snail) ekstraktiga boy, quruq va yorilgan tovonlarni yumshatuvchi, intensiv oziqlantiruvchi oyoq kremi.",
+            usage: "Toza va quruq oyoq terisiga, ayniqsa tovon qismiga yengil massaj harakatlari bilan surting.",
+            stock: 100
+        },
+        {
+            id: 16, 
+            name: "Brown Rice Cleansing Foam", 
+            price: 60000, 
+            image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ7Fu8s0KxZLmRFaqQfaJ5eBgi-rwMMZAMWig&s", 
+            desc: "Jigarrang guruch ekstrakti bilan boyitilgan, terini chuqur tozalovchi, qora nuqtalarni ketkazib, yuzga yorqinlik baxsh etuvchi penka.",
+            usage: "Oz miqdordagi ko'pikni nam yuzga surtib, yengil massaj qiling va iliq suv bilan yuving.",
+            stock: 100
+        },
+        {
+            id: 17, 
+            name: "Dr.G R.E.D Blemish Clear Soothing Cream", 
+            price: 130000, 
+            image: "https://m.media-amazon.com/images/I/714ZSBp0JBL._AC_UF1000,1000_QL80_.jpg", 
+            desc: "Muammoli, qizarishga moyil va akne toshgan terini tinchlantiruvchi, yallig'lanishni qaytaruvchi davolovchi krem.",
+            usage: "Ertalab va kechqurun tozalangan yuzga, ayniqsa muammoli joylarga surting.",
+            stock: 100
+        },
+        {
+            id: 18, 
+            name: "AXIS-Y Set Nabor (Toner, Ko'z kremi, Serum, Oyna)", 
+            price: 150000, 
+            image: "https://images.uzum.uz/d5f9l8jtqdhjp1veiab0/original.jpg", 
+            desc: "Terini iqlim o'zgarishlaridan himoya qiluvchi mashhur AXIS-Y brendining maxsus to'plami. Ichida o'ziga xos sovg'a sifatida oynasi ham bor!",
+            usage: "Toner -> Serum -> Ko'z kremi ketma-ketligida qo'llang. Barcha teri tiplari uchun mos.",
+            stock: 100
+        },
+            
+        
+        
+        
+    ];
+
+    let cart = {};
+
+    // Asosiy menyuni chizish
+    function renderGrid() {
+        const grid = document.getElementById('product-grid');
+        grid.innerHTML = products.map(p => {
+            // Ombor qoldig'ini tekshiramiz
+            const disabledClass = p.stock <= 0 ? 'out-of-stock' : '';
+            const priceOrStatus = p.stock <= 0 
+                ? `<div class="sold-out-text">TUGAGAN</div>` 
+                : `<div class="item-price">${p.price.toLocaleString()} so'm</div>`;
+
+            return `
+            <div class="item-card ${disabledClass}" onclick="openDetail(${p.id})">
+                <img src="${p.image}" class="item-img" alt="${p.name}">
+                <div class="item-title">${p.name}</div>
+                ${priceOrStatus}
+            </div>
+            `;
+        }).join('');
+    }
+
+    // Ichki sahifani ochish
+    function openDetail(id) {
+        const p = products.find(x => x.id === id);
+        const count = cart[id] ? cart[id].qty : 0;
+        document.getElementById('detail-content').innerHTML = `
+            <img src="${p.image}" class="detail-img" alt="${p.name}">
+            <h1>${p.name}</h1>
+            <div class="item-price" style="font-size: 20px;">${p.price.toLocaleString()} so'm</div>
+            <div class="section-title">Tarkibi va Tavsifi</div>
+            <div>${p.desc}</div>
+            <div class="section-title">Qo'llanilishi</div>
+            <div>${p.usage}</div>
+            <div class="controls">
+                <button class="btn-round" onclick="updateQty(${p.id}, -1)">-</button>
+                <span style="font-size: 24px; font-weight: bold;">${count}</span>
+                <button class="btn-round" onclick="updateQty(${p.id}, 1)">+</button>
+            </div>
+        `;
+        document.getElementById('main-view').style.display = 'none';
+        document.getElementById('detail-view').style.display = 'block';
+    }
+
+    function closeDetail() {
+        document.getElementById('detail-view').style.display = 'none';
+        document.getElementById('main-view').style.display = 'block';
+    }
+
+    // Miqdorni o'zgartirish va ombor limitini tekshirish
+    function updateQty(id, change) {
+        const p = products.find(x => x.id === id);
+        if (!cart[id]) cart[id] = { name: p.name, price: p.price, qty: 0 };
+        
+        let newQty = cart[id].qty + change;
+        
+        // Noldan kamaymasligi va Ombordagidan oshib ketmasligi kerak
+        if (newQty < 0) newQty = 0;
+        if (newQty > p.stock) {
+            tg.showAlert(`Kechirasiz, omborda faqat ${p.stock} ta qolgan!`);
+            newQty = p.stock;
+        }
+
+        cart[id].qty = newQty;
+        if (cart[id].qty <= 0) delete cart[id];
+        
+        openDetail(id); // Sahifani yangilash
+        updateMainButton();
+    }
+
+    // Telegram MainButton
+    function updateMainButton() {
+        let total = 0;
+        for (let id in cart) total += cart[id].qty * cart[id].price;
+        
+        if (total > 0) {
+            tg.MainButton.setText(`Buyurtma berish (${total.toLocaleString()} so'm)`);
+            tg.MainButton.show();
+        } else {
+            tg.MainButton.hide();
+        }
+    }
+
+    // Jo'natish tugmasi
+    tg.MainButton.onClick(() => {
+        tg.sendData(JSON.stringify(Object.values(cart)));
+    });
+
+    renderGrid();
+</script>
+</body>
+</html>
