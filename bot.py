@@ -24,7 +24,7 @@ ADMIN_ID = 6599495111
 # ==========================================
 # 🔧 GITHUB SOZLAMALARI
 # ==========================================
-GITHUB_TOKEN = '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'
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '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')
 GITHUB_USER = 'asadbek21mamatov-cmyk'
 GITHUB_REPO = 'zakazlar-taxtachasi'
 GITHUB_FILE = 'mahsulotlar.json'
@@ -39,6 +39,32 @@ except Exception:
 current_order = {}
 active_orders = {}
 admin_state = {}
+
+# ==========================================
+# 🚫 BLOKLANGAN FOYDALANUVCHILAR
+# ==========================================
+BLOCKED_FILE = 'blocked.json'
+
+def blocked_yukla():
+    if os.path.exists(BLOCKED_FILE):
+        try:
+            with open(BLOCKED_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return []
+
+def blocked_saqlа(blocked):
+    try:
+        with open(BLOCKED_FILE, 'w') as f:
+            json.dump(blocked, f)
+    except Exception as e:
+        logging.error(f"Blocked saqlashda xato: {e}")
+
+BLOCKED_USERS = blocked_yukla()
+
+def is_blocked(user_id):
+    return user_id in BLOCKED_USERS
 
 # ==========================================
 # 📦 GITHUB DAN MAHSULOTLARNI O'QISH/SAQLASH
@@ -143,6 +169,9 @@ def send_welcome(message):
         markup.add(
             types.KeyboardButton("➕ Yangi mahsulot qo'shish"),
             types.KeyboardButton("🗑 Mahsulot o'chirish")
+        )
+        markup.add(
+            types.KeyboardButton("🚫 Bloklangan foydalanuvchilar")
         )
         bot.send_message(message.chat.id, "👋 Assalomu alaykum, Admin!\nNimani qilmoqchisiz?", reply_markup=markup)
     else:
@@ -632,10 +661,14 @@ def process_location(message):
             'cart': order['cart']
         }
 
+        user_id = message.chat.id
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(
             types.InlineKeyboardButton("❌ Bekor qilish", callback_data=f"reject_{order_id}"),
             types.InlineKeyboardButton("✅ Qabul qilish", callback_data=f"accept_{order_id}")
+        )
+        markup.add(
+            types.InlineKeyboardButton("🚫 Bloklash", callback_data=f"block_{user_id}")
         )
         try:
             xabar = bot.send_message(CHANNEL_USERNAME, channel_msg, parse_mode='HTML', reply_markup=markup)
@@ -656,6 +689,113 @@ def process_location(message):
     else:
         bot.send_message(message.chat.id, "❌ Joylashuvni yuborish tugmasini bosing.")
         bot.register_next_step_handler(message, process_location)
+
+
+# ==========================================
+# 🚫 BLOKLASH / BLOKDAN CHIQARISH
+# ==========================================
+@bot.callback_query_handler(func=lambda call: call.data.startswith('block_') or call.data.startswith('unblock_'))
+def bloklash_handler(call):
+    parts = call.data.split('_')
+    action = parts[0]
+    user_id = int(parts[1])
+
+    if action == 'block':
+        if user_id not in BLOCKED_USERS:
+            BLOCKED_USERS.append(user_id)
+            blocked_saqlа(BLOCKED_USERS)
+
+        # Tugmani "Blokdan chiqarish" ga o'zgartirish
+        try:
+            markup = call.message.reply_markup
+            new_markup = types.InlineKeyboardMarkup()
+            for row in markup.keyboard:
+                new_row = []
+                for btn in row:
+                    if btn.callback_data and btn.callback_data.startswith('block_'):
+                        new_row.append(types.InlineKeyboardButton(
+                            "✅ Blokdan chiqarish", callback_data=f"unblock_{user_id}"
+                        ))
+                    else:
+                        new_row.append(btn)
+                new_markup.row(*new_row)
+            bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=new_markup)
+        except Exception as e:
+            logging.error(f"Markup yangilashda xato: {e}")
+
+        # Mijozga xabar
+        try:
+            bot.send_message(
+                user_id,
+                "🚫 <b>Siz botdan bloklangansiz.</b>\n\n"
+                "Muammo bo'lsa admin bilan bog'laning: @asadbek21mamatov",
+                parse_mode='HTML'
+            )
+        except Exception:
+            pass
+
+        bot.answer_callback_query(call.id, f"✅ Foydalanuvchi {user_id} bloklandi!", show_alert=True)
+
+    elif action == 'unblock':
+        if user_id in BLOCKED_USERS:
+            BLOCKED_USERS.remove(user_id)
+            blocked_saqlа(BLOCKED_USERS)
+
+        # Tugmani "Bloklash" ga qaytarish
+        try:
+            markup = call.message.reply_markup
+            new_markup = types.InlineKeyboardMarkup()
+            for row in markup.keyboard:
+                new_row = []
+                for btn in row:
+                    if btn.callback_data and btn.callback_data.startswith('unblock_'):
+                        new_row.append(types.InlineKeyboardButton(
+                            "🚫 Bloklash", callback_data=f"block_{user_id}"
+                        ))
+                    else:
+                        new_row.append(btn)
+                new_markup.row(*new_row)
+            bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=new_markup)
+        except Exception as e:
+            logging.error(f"Markup yangilashda xato: {e}")
+
+        # Mijozga xabar
+        try:
+            bot.send_message(
+                user_id,
+                "✅ <b>Blokingiz olib tashlandi.</b>\n\n"
+                "Endi yana do'kondan xarid qilishingiz mumkin!",
+                parse_mode='HTML'
+            )
+        except Exception:
+            pass
+
+        bot.answer_callback_query(call.id, f"✅ Foydalanuvchi {user_id} blokdan chiqarildi!", show_alert=True)
+
+
+# ==========================================
+# 🛡 BLOKLANGAN FOYDALANUVCHILARNI FILTRLASH
+# ==========================================
+@bot.message_handler(func=lambda m: is_blocked(m.chat.id))
+def blocked_user_handler(message):
+    # Bloklangan foydalanuvchi yozsa — hech narsa ko'rmaydi (jimgina o'tkazib yuborish)
+    pass
+
+
+# ==========================================
+# 📋 BLOKLANGAN FOYDALANUVCHILAR RO'YXATI (ADMIN)
+# ==========================================
+@bot.message_handler(func=lambda m: m.text == "🚫 Bloklangan foydalanuvchilar")
+def bloklangan_royxat(message):
+    if not is_admin(message.chat.id):
+        return
+    if not BLOCKED_USERS:
+        bot.send_message(message.chat.id, "✅ Bloklangan foydalanuvchilar yo'q!")
+        return
+    text = "🚫 <b>BLOKLANGAN FOYDALANUVCHILAR:</b>\n\n"
+    for uid in BLOCKED_USERS:
+        text += f"• ID: <code>{uid}</code>\n"
+    bot.send_message(message.chat.id, text, parse_mode='HTML')
 
 
 if __name__ == '__main__':
