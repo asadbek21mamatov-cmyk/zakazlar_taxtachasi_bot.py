@@ -24,9 +24,7 @@ ADMIN_ID = 6599495111
 # ==========================================
 # 🔧 GITHUB SOZLAMALARI
 # ==========================================
-from dotenv import load_dotenv
-load_dotenv()
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+GITHUB_TOKEN = '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'
 GITHUB_USER = 'asadbek21mamatov-cmyk'
 GITHUB_REPO = 'zakazlar-taxtachasi'
 GITHUB_FILE = 'mahsulotlar.json'
