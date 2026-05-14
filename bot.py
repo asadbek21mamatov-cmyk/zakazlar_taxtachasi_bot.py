@@ -26,7 +26,7 @@ ADMIN_ID = 6599495111
 # ==========================================
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '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')
 GITHUB_USER = 'asadbek21mamatov-cmyk'
-GITHUB_REPO = 'zakazlar-taxtachasi'
+GITHUB_REPO = 'zakazlar_taxtachasi_bot.py'
 GITHUB_FILE = 'mahsulotlar.json'
 GITHUB_API = f'https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{GITHUB_FILE}'
 RAW_URL = f'https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/main/{GITHUB_FILE}'
