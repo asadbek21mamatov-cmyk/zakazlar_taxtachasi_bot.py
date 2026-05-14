@@ -24,7 +24,7 @@ ADMIN_ID = 6599495111
 # ==========================================
 # 🔧 GITHUB SOZLAMALARI
 # ==========================================
-GITHUB_TOKEN = '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'
+GITHUB_TOKEN = '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'
 GITHUB_USER = 'asadbek21mamatov-cmyk'
 GITHUB_REPO = 'zakazlar-taxtachasi'
 GITHUB_FILE = 'mahsulotlar.json'
