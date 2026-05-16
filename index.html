@@ -72,7 +72,7 @@
     async function loadProducts() {
         try {
             const res = await fetch(
-               'https://raw.githubusercontent.com/asadbek21mamatov-cmyk/zakazlar_taxtachasi_bot.py/main/mahsulotlar.json=' + Date.now()
+              'https://raw.githubusercontent.com/asadbek21mamatov-cmyk/zakazlar_taxtachasi_bot.py/main/mahsulotlar.json?cache=' + Date.now()
             );
             if (!res.ok) throw new Error('Yuklashda xato');
             products = await res.json();
