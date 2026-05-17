@@ -63,6 +63,21 @@ def blocked_saqlash(blocked):
         logging.error(f"Blocked saqlashda xato: {e}")
 
 BLOCKED_USERS = blocked_yukla()
+LOCAL_FALLBACK_FILE = 'maxsulot.json'
+
+
+def load_local_products():
+    if os.path.exists(LOCAL_FALLBACK_FILE):
+        try:
+            with open(LOCAL_FALLBACK_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                logging.info(f"Local fayldan yuklandi: {LOCAL_FALLBACK_FILE}")
+                return data
+            logging.warning(f"Local mahsulotlar formati noto'g'ri: {LOCAL_FALLBACK_FILE}")
+        except Exception as e:
+            logging.error(f"Local mahsulotlarni yuklashda xato: {e}")
+    return []
 
 
 @bot.message_handler(func=lambda m: is_blocked(m.chat.id), content_types=['text', 'location', 'contact', 'web_app_data'])
@@ -144,12 +159,19 @@ def github_mahsulotlar_saqlash(mahsulotlar):
         return False
 
 def ombor_yukla():
-    """Mahsulotlarni GitHub'dan yuklash"""
+    """Mahsulotlarni GitHub'dan yoki mahalliy fayldan yuklash"""
     mahsulotlar = github_mahsulotlar_yukla()
     if mahsulotlar:
         logging.info(f"GitHub'dan yuklandi: {len(mahsulotlar)} ta mahsulot")
         return mahsulotlar
-    logging.warning("GitHub'dan yuklab bo'lmadi, bo'sh qaytdi")
+
+    logging.warning("GitHub'dan yuklab bo'lmadi, local fayldan yuklashga harakat qilinmoqda...")
+    mahsulotlar = load_local_products()
+    if mahsulotlar:
+        logging.info(f"Local fayldan yuklandi: {len(mahsulotlar)} ta mahsulot")
+        return mahsulotlar
+
+    logging.warning("Mahsulotlarni local fayldan ham yuklab bo'lmadi, bo'sh qaytdi")
     return []
 
 # Botni ishga tushirganda yuklash
