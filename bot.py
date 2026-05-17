@@ -13,10 +13,10 @@ import string
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-TOKEN = '8606446257:AAEflktYac20545qsk192Eh3B5109HHvhX4'
+TOKEN = os.getenv('BOT_TOKEN', '8606446257:AAEflktYac20545qsk192Eh3B5109HHvhX4')
 bot = telebot.TeleBot(TOKEN)
 
-WEB_APP_URL = "https://serene-torte-06a176.netlify.app"
+WEB_APP_URL = "https://botpy2.netlify.app"
 CHANNEL_USERNAME = '@zakaz_taxtachasi'
 TASHKENT_TZ = pytz.timezone('Asia/Tashkent')
 ADMIN_ID = 6599495111
@@ -24,9 +24,9 @@ ADMIN_ID = 6599495111
 # ==========================================
 # 🔧 GITHUB SOZLAMALARI
 # ==========================================
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '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')
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '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')
 GITHUB_USER = 'asadbek21mamatov-cmyk'
-GITHUB_REPO = 'zakazlar_taxtachasi_bot.py'
+GITHUB_REPO = 'zakazlar-taxtachasi'
 GITHUB_FILE = 'mahsulotlar.json'
 GITHUB_API = f'https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{GITHUB_FILE}'
 RAW_URL = f'https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/main/{GITHUB_FILE}'
@@ -44,6 +44,7 @@ admin_state = {}
 # 🚫 BLOKLANGAN FOYDALANUVCHILAR
 # ==========================================
 BLOCKED_FILE = 'blocked.json'
+ACTIVE_ORDERS_FILE = 'active_orders.json'
 
 def blocked_yukla():
     if os.path.exists(BLOCKED_FILE):
@@ -54,14 +55,41 @@ def blocked_yukla():
             pass
     return []
 
-def blocked_saqlа(blocked):
+def blocked_saqlash(blocked):
     try:
-        with open(BLOCKED_FILE, 'w') as f:
-            json.dump(blocked, f)
+        with open(BLOCKED_FILE, 'w', encoding='utf-8') as f:
+            json.dump(blocked, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logging.error(f"Blocked saqlashda xato: {e}")
 
 BLOCKED_USERS = blocked_yukla()
+
+
+@bot.message_handler(func=lambda m: is_blocked(m.chat.id), content_types=['text', 'location', 'contact', 'web_app_data'])
+def blocked_user_handler(message):
+    logging.info(f"Blocked user {message.chat.id} attempted to interact")
+    return
+
+
+def load_active_orders():
+    if os.path.exists(ACTIVE_ORDERS_FILE):
+        try:
+            with open(ACTIVE_ORDERS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logging.error(f"Active orders yuklashda xato: {e}")
+    return {}
+
+
+def save_active_orders():
+    try:
+        with open(ACTIVE_ORDERS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(active_orders, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.error(f"Active orders saqlashda xato: {e}")
+
+
+active_orders = load_active_orders()
 
 def is_blocked(user_id):
     return user_id in BLOCKED_USERS
@@ -80,26 +108,29 @@ def github_mahsulotlar_yukla():
         logging.error(f"GitHub'dan yuklashda xato: {e}")
     return []
 
-def github_mahsulotlar_saqlа(mahsulotlar):
+def github_mahsulotlar_saqlash(mahsulotlar):
     """Mahsulotlarni GitHub'ga saqlash"""
     try:
-        # Avval hozirgi faylning SHA sini olish (keyin yangilash uchun kerak)
         headers = {
             'Authorization': f'token {GITHUB_TOKEN}',
             'Content-Type': 'application/json'
         }
         res = requests.get(GITHUB_API, headers=headers, timeout=10)
-        sha = res.json().get('sha', '') if res.status_code == 200 else ''
+        sha = None
+        if res.status_code == 200:
+            sha = res.json().get('sha')
+        elif res.status_code != 404:
+            logging.error(f"GitHub faylini o'qishda xato: {res.status_code} — {res.text}")
 
-        # JSON ni base64 ga o'girish
         content = json.dumps(mahsulotlar, ensure_ascii=False, indent=2)
         encoded = base64.b64encode(content.encode('utf-8')).decode('utf-8')
 
         data = {
             'message': 'Ombor yangilandi (bot orqali)',
-            'content': encoded,
-            'sha': sha
+            'content': encoded
         }
+        if sha:
+            data['sha'] = sha
 
         put_res = requests.put(GITHUB_API, headers=headers, json=data, timeout=15)
         if put_res.status_code in [200, 201]:
@@ -277,7 +308,7 @@ def miqdor_kiriting(message):
     admin_state.pop(message.chat.id, None)
 
     bot.send_message(message.chat.id, "⏳ GitHub'ga saqlanmoqda...")
-    ok = github_mahsulotlar_saqlа(MAHSULOTLAR)
+    ok = github_mahsulotlar_saqlash(MAHSULOTLAR)
 
     if ok:
         bot.send_message(
@@ -353,7 +384,10 @@ def yangi_rasm(message):
     if message.text == "🔙 Orqaga":
         admin_state.pop(message.chat.id, None)
         return send_welcome(message)
-    rasm = message.text.strip() if message.text.strip() != 'yoq' else ''
+    rasm = message.text.strip() if message.text.strip().lower() != 'yoq' else ''
+    if rasm and not re.match(r'^https://', rasm):
+        bot.send_message(message.chat.id, "❌ Rasm URL manzili https://... bilan boshlanishi kerak yoki 'yoq' deb yozing.")
+        return
     admin_state[message.chat.id]['rasm'] = rasm
     admin_state[message.chat.id]['holat'] = 'yangi_tavsif'
     bot.send_message(message.chat.id, "✅ Rasm saqlandi!\n\nMahsulot <b>tavsifini</b> kiriting:", parse_mode='HTML')
@@ -392,7 +426,7 @@ def yangi_ishlatish(message):
     admin_state.pop(message.chat.id, None)
 
     bot.send_message(message.chat.id, "⏳ GitHub'ga saqlanmoqda...")
-    ok = github_mahsulotlar_saqlа(MAHSULOTLAR)
+    ok = github_mahsulotlar_saqlash(MAHSULOTLAR)
 
     if ok:
         bot.send_message(
@@ -441,7 +475,7 @@ def mahsulot_ochirish(message):
         bot.send_message(message.chat.id, "❌ Ro'yxatdan tanlang!")
         return
 
-    mahsulot_nomi = message.text[2:].strip()
+    mahsulot_nomi = message.text.split(" ", 1)[1].strip()
     mahsulot = mahsulot_topish(mahsulot_nomi)
     if not mahsulot:
         bot.send_message(message.chat.id, "❌ Mahsulot topilmadi!")
@@ -478,7 +512,7 @@ def ochirish_tasdiqlash(call):
     admin_state.pop(call.message.chat.id, None)
 
     bot.edit_message_text("⏳ GitHub'ga saqlanmoqda...", call.message.chat.id, call.message.message_id)
-    ok = github_mahsulotlar_saqlа(MAHSULOTLAR)
+    ok = github_mahsulotlar_saqlash(MAHSULOTLAR)
 
     if ok:
         bot.send_message(call.message.chat.id, f"✅ <b>{mahsulot_nomi}</b> o'chirildi! Sayt ~1 daqiqada yangilanadi.", parse_mode='HTML')
@@ -507,7 +541,7 @@ def handle_admin_action(call):
             mahsulot = mahsulot_topish(name)
             if mahsulot:
                 mahsulot['stock'] -= item['qty']
-        github_mahsulotlar_saqlа(MAHSULOTLAR)
+        github_mahsulotlar_saqlash(MAHSULOTLAR)
 
         new_text = f"🟢 <b>QABUL QILINDI</b>\n\n{order['channel_msg']}"
         bot.edit_message_text(new_text, call.message.chat.id, call.message.message_id, parse_mode='HTML')
@@ -528,6 +562,8 @@ def handle_admin_action(call):
         )
 
     del active_orders[order_id]
+    save_active_orders()
+    save_active_orders()
 
 
 # ==========================================
@@ -583,7 +619,7 @@ def process_name(message):
     if message.text == "❌ Bekor qilish":
         return send_welcome(message)
     words = re.sub(r'\s+', ' ', message.text.strip()).split()
-    is_valid = len(words) == 2
+    is_valid = len(words) >= 2
     for w in words:
         if not w.replace("'", "").replace("`", "").isalpha():
             is_valid = False
@@ -660,6 +696,7 @@ def process_location(message):
             'channel_msg': channel_msg,
             'cart': order['cart']
         }
+        save_active_orders()
 
         user_id = message.chat.id
         markup = types.InlineKeyboardMarkup(row_width=2)
@@ -703,7 +740,7 @@ def bloklash_handler(call):
     if action == 'block':
         if user_id not in BLOCKED_USERS:
             BLOCKED_USERS.append(user_id)
-            blocked_saqlа(BLOCKED_USERS)
+            blocked_saqlash(BLOCKED_USERS)
 
         # Tugmani "Blokdan chiqarish" ga o'zgartirish
         try:
@@ -739,7 +776,7 @@ def bloklash_handler(call):
     elif action == 'unblock':
         if user_id in BLOCKED_USERS:
             BLOCKED_USERS.remove(user_id)
-            blocked_saqlа(BLOCKED_USERS)
+            blocked_saqlash(BLOCKED_USERS)
 
         # Tugmani "Bloklash" ga qaytarish
         try:
