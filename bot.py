@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 TOKEN = os.getenv('BOT_TOKEN', '8606446257:AAEflktYac20545qsk192Eh3B5109HHvhX4')
 bot = telebot.TeleBot(TOKEN)
 
-WEB_APP_URL = "https://botpy2.netlify.app"
+WEB_APP_URL = "https://asadbek21mamatov-cmyk.github.io/zakazlar_taxtachasi_bot.py/"
 CHANNEL_USERNAME = '@zakaz_taxtachasi'
 TASHKENT_TZ = pytz.timezone('Asia/Tashkent')
 ADMIN_ID = 6599495111
